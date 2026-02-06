@@ -1,6 +1,5 @@
 """
-汽车行业HR情报监控系统 - Streamlit主界面
-提供现代化的Web界面展示和筛选功能
+汽车行业HR情报监控系统 - 带用户认证的主界面
 """
 
 import streamlit as st
@@ -8,8 +7,14 @@ import json
 import pandas as pd
 from datetime import datetime, timedelta
 from collections import Counter
-import yaml
+import os
 
+# 导入用户认证模块
+try:
+    from 用户认证 import 用户管理
+    用户管理器 = 用户管理()
+except:
+    用户管理器 = None
 
 # 页面配置
 st.set_page_config(
@@ -96,11 +101,159 @@ st.markdown("""
         color: #CEA472;
         font-weight: 500;
     }
+    .login-box {
+        max-width: 400px;
+        margin: 100px auto;
+        padding: 2rem;
+        background: white;
+        border-radius: 10px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
 </style>
 """, unsafe_allow_html=True)
 
 
-@st.cache_data(ttl=600)  # 缓存10分钟
+def 登录页面():
+    """显示登录页面"""
+    st.markdown('<div class="main-header">🚗 汽车行业HR情报监控系统</div>', unsafe_allow_html=True)
+
+    col1, col2, col3 = st.columns([1, 1, 1])
+
+    with col2:
+        st.markdown("### 🔐 用户登录")
+
+        with st.form("login_form"):
+            用户名 = st.text_input("用户名", placeholder="请输入用户名")
+            密码 = st.text_input("密码", type="password", placeholder="请输入密码")
+            提交 = st.form_submit_button("登录", use_container_width=True)
+
+            if 提交:
+                if not 用户名 or not 密码:
+                    st.error("请输入用户名和密码")
+                elif not 用户管理器:
+                    st.error("用户认证系统未启用")
+                else:
+                    用户信息 = 用户管理器.验证登录(用户名, 密码)
+                    if 用户信息:
+                        st.session_state['logged_in'] = True
+                        st.session_state['user_info'] = 用户信息
+                        st.success(f"欢迎回来，{用户信息['name']}！")
+                        st.rerun()
+                    else:
+                        st.error("用户名或密码错误，或账号已被禁用")
+
+        st.info("💡 默认管理员账号：admin / admin123")
+
+
+def 管理员后台():
+    """管理员后台页面"""
+    st.markdown('<div class="main-header">👥 用户管理</div>', unsafe_allow_html=True)
+
+    tabs = st.tabs(["📋 用户列表", "➕ 创建用户", "📊 访问统计"])
+
+    # 用户列表
+    with tabs[0]:
+        st.markdown("### 所有用户")
+
+        用户列表 = 用户管理器.获取所有用户()
+
+        if 用户列表:
+            df = pd.DataFrame(用户列表)
+            df['状态'] = df['enabled'].apply(lambda x: '✅ 启用' if x else '❌ 禁用')
+            df['角色'] = df['role'].apply(lambda x: '👑 管理员' if x == 'admin' else '👤 用户')
+
+            显示列 = ['username', 'name', '角色', '状态', 'created_at']
+            st.dataframe(df[显示列], use_container_width=True, hide_index=True)
+
+            st.markdown("---")
+            st.markdown("### 用户操作")
+
+            col1, col2 = st.columns(2)
+
+            with col1:
+                st.markdown("#### 修改密码")
+                with st.form("change_password_form"):
+                    用户名 = st.selectbox("选择用户", [u['username'] for u in 用户列表])
+                    新密码 = st.text_input("新密码", type="password")
+                    if st.form_submit_button("修改密码"):
+                        if 用户管理器.修改密码(用户名, 新密码):
+                            st.success(f"已修改 {用户名} 的密码")
+                        else:
+                            st.error("修改失败")
+
+            with col2:
+                st.markdown("#### 启用/禁用用户")
+                with st.form("toggle_user_form"):
+                    用户名 = st.selectbox("选择用户", [u['username'] for u in 用户列表 if u['username'] != 'admin'], key="toggle")
+                    操作 = st.radio("操作", ["启用", "禁用"])
+                    if st.form_submit_button("执行"):
+                        if 用户管理器.启用禁用用户(用户名, 操作 == "启用"):
+                            st.success(f"已{操作}用户 {用户名}")
+                        else:
+                            st.error("操作失败")
+
+    # 创建用户
+    with tabs[1]:
+        st.markdown("### 创建新用户")
+
+        with st.form("create_user_form"):
+            col1, col2 = st.columns(2)
+
+            with col1:
+                新用户名 = st.text_input("用户名", placeholder="英文或拼音")
+                新姓名 = st.text_input("姓名", placeholder="真实姓名")
+
+            with col2:
+                新密码 = st.text_input("密码", type="password", placeholder="至少6位")
+                新角色 = st.selectbox("角色", ["user", "admin"])
+
+            if st.form_submit_button("创建用户", use_container_width=True):
+                if not 新用户名 or not 新密码 or not 新姓名:
+                    st.error("请填写所有字段")
+                elif len(新密码) < 6:
+                    st.error("密码至少6位")
+                elif 用户管理器.创建用户(新用户名, 新密码, 新姓名, 新角色):
+                    st.success(f"成功创建用户：{新用户名}")
+                else:
+                    st.error("用户名已存在")
+
+    # 访问统计
+    with tabs[2]:
+        st.markdown("### 用户访问统计")
+
+        统计数据 = 用户管理器.获取用户统计()
+
+        if 统计数据:
+            统计列表 = []
+            for 用户名, 数据 in 统计数据.items():
+                统计列表.append({
+                    '用户名': 用户名,
+                    '登录次数': 数据['login_count'],
+                    '浏览次数': 数据['view_count'],
+                    '最后活跃': 数据['last_active'][:16] if 数据['last_active'] else '-'
+                })
+
+            df = pd.DataFrame(统计列表)
+            st.dataframe(df, use_container_width=True, hide_index=True)
+
+            st.markdown("---")
+            st.markdown("### 最近访问日志")
+
+            日志 = 用户管理器.获取用户日志(限制数量=20)
+
+            for log in 日志:
+                动作 = "🔐 登录" if log['action'] == 'login' else "📰 浏览新闻"
+                时间 = log['timestamp'][:16]
+
+                if log['action'] == 'view_news':
+                    st.text(f"{时间} | {log['username']} | {动作}: {log.get('news_title', '')}")
+                else:
+                    st.text(f"{时间} | {log['username']} | {动作}")
+        else:
+            st.info("暂无访问记录")
+
+
+@st.cache_data(ttl=600)
 def 加载数据():
     """加载新闻数据"""
     try:
@@ -111,311 +264,156 @@ def 加载数据():
         return []
 
 
-@st.cache_data
-def 加载配置():
-    """加载配置文件"""
-    try:
-        with open('配置文件.yaml', 'r', encoding='utf-8') as f:
-            return yaml.safe_load(f)
-    except FileNotFoundError:
-        return {}
-
-
-def 渲染顶部统计():
-    """渲染顶部统计卡片"""
-    新闻列表 = st.session_state.get('新闻列表', [])
-
-    if not 新闻列表:
-        st.warning("暂无数据，请先运行数据抓取脚本")
-        return
-
-    col1, col2, col3, col4 = st.columns(4)
-
-    with col1:
-        st.markdown(f"""
-        <div class="stat-card">
-            <div class="stat-label">总新闻数</div>
-            <div class="stat-number">{len(新闻列表)}</div>
-        </div>
-        """, unsafe_allow_html=True)
-
-    with col2:
-        最近7天 = sum(1 for n in 新闻列表
-                     if (datetime.now() - datetime.fromisoformat(n['crawl_time'])).days <= 7)
-        st.markdown(f"""
-        <div class="stat-card">
-            <div class="stat-label">近7天新增</div>
-            <div class="stat-number">{最近7天}</div>
-        </div>
-        """, unsafe_allow_html=True)
-
-    with col3:
-        公司数 = len(set(n['company'] for n in 新闻列表))
-        st.markdown(f"""
-        <div class="stat-card">
-            <div class="stat-label">监控公司</div>
-            <div class="stat-number">{公司数}</div>
-        </div>
-        """, unsafe_allow_html=True)
-
-    with col4:
-        分类数 = len(set(n.get('hr_category', '未分类') for n in 新闻列表))
-        st.markdown(f"""
-        <div class="stat-card">
-            <div class="stat-label">HR分类</div>
-            <div class="stat-number">{分类数}</div>
-        </div>
-        """, unsafe_allow_html=True)
-
-
-def 渲染侧边栏():
-    """渲染侧边栏筛选器"""
-    st.sidebar.markdown("## 🔍 筛选条件")
-
-    新闻列表 = st.session_state.get('新闻列表', [])
-
-    # 按公司筛选
-    所有公司 = ['全部'] + sorted(set(n['company'] for n in 新闻列表))
-    选中公司 = st.sidebar.selectbox("按公司筛选", 所有公司, key='公司筛选')
-
-    # 按HR模块筛选
-    所有分类 = ['全部'] + sorted(set(n.get('hr_category', '未分类') for n in 新闻列表))
-    选中分类 = st.sidebar.selectbox("按HR模块筛选", 所有分类, key='分类筛选')
-
-    # 按来源筛选
-    所有来源 = ['全部'] + sorted(set(n.get('source', '未知') for n in 新闻列表))
-    选中来源 = st.sidebar.selectbox("按新闻来源筛选", 所有来源, key='来源筛选')
-
-    # 时间范围筛选
-    st.sidebar.markdown("### 📅 时间范围")
-    时间选项 = st.sidebar.radio(
-        "选择时间",
-        ['最近24小时', '最近7天', '最近30天', '全部'],
-        index=1
-    )
-
-    # 搜索框
-    st.sidebar.markdown("### 🔎 关键词搜索")
-    搜索词 = st.sidebar.text_input("输入关键词", placeholder="搜索标题或摘要...")
-
-    return {
-        '公司': 选中公司,
-        '分类': 选中分类,
-        '来源': 选中来源,
-        '时间': 时间选项,
-        '搜索词': 搜索词
-    }
-
-
-def 筛选新闻(新闻列表, 筛选条件):
-    """根据筛选条件过滤新闻"""
-    结果 = 新闻列表.copy()
-
-    # 按公司筛选
-    if 筛选条件['公司'] != '全部':
-        结果 = [n for n in 结果 if n['company'] == 筛选条件['公司']]
-
-    # 按分类筛选
-    if 筛选条件['分类'] != '全部':
-        结果 = [n for n in 结果 if n.get('hr_category') == 筛选条件['分类']]
-
-    # 按来源筛选
-    if 筛选条件['来源'] != '全部':
-        结果 = [n for n in 结果 if n.get('source') == 筛选条件['来源']]
-
-    # 按时间筛选
-    现在 = datetime.now()
-    if 筛选条件['时间'] != '全部':
-        时间映射 = {
-            '最近24小时': 1,
-            '最近7天': 7,
-            '最近30天': 30
-        }
-        天数 = 时间映射[筛选条件['时间']]
-        截止时间 = 现在 - timedelta(days=天数)
-        结果 = [n for n in 结果
-                if datetime.fromisoformat(n['crawl_time']) > 截止时间]
-
-    # 按关键词搜索
-    if 筛选条件['搜索词']:
-        搜索词 = 筛选条件['搜索词'].lower()
-        结果 = [n for n in 结果
-                if 搜索词 in n['title'].lower()
-                or 搜索词 in n.get('summary', '').lower()]
-
-    return 结果
-
-
-def 渲染新闻卡片(新闻):
-    """渲染单个新闻卡片"""
-    # 格式化时间
-    try:
-        发布时间 = datetime.fromisoformat(新闻['crawl_time'])
-        时间文本 = 发布时间.strftime('%Y-%m-%d %H:%M')
-    except:
-        时间文本 = '未知时间'
-
-    # 构建HTML
-    html = f"""
-    <div class="news-card">
-        <div class="news-title">{新闻['title']}</div>
-        <div class="news-meta">
-            <span>📰 {新闻.get('source', '未知来源')}</span> |
-            <span>🕐 {时间文本}</span>
-        </div>
-        <div class="news-summary">{新闻.get('summary', '暂无摘要')}</div>
-        <div>
-            <span class="tag tag-company">🏢 {新闻['company']}</span>
-            <span class="tag tag-category">📋 {新闻.get('hr_category', '未分类')}</span>
-    """
-
-    # 添加关键词标签
-    if 新闻.get('keywords'):
-        for 关键词 in 新闻['keywords'][:3]:
-            html += f'<span class="tag">🏷️ {关键词}</span>'
-
-    html += f"""
-        </div>
-        <div style="margin-top: 0.8rem;">
-            <a href="{新闻['url']}" target="_blank" style="color: #1890ff; text-decoration: none;">
-                📖 阅读原文 →
-            </a>
-        </div>
-    </div>
-    """
-
-    st.markdown(html, unsafe_allow_html=True)
-
-
-def 渲染概览页面():
-    """渲染首页概览"""
+def 渲染新闻内容():
+    """渲染新闻页面（原有功能）"""
     st.markdown('<div class="main-header">🚗 汽车行业HR情报监控系统</div>', unsafe_allow_html=True)
 
-    # 顶部统计
-    渲染顶部统计()
-
-    st.markdown("---")
-
-    # 侧边栏筛选
-    筛选条件 = 渲染侧边栏()
-
-    # 获取筛选后的数据
+    # 顶部统计（简化版）
     新闻列表 = st.session_state.get('新闻列表', [])
-    筛选后新闻 = 筛选新闻(新闻列表, 筛选条件)
 
-    # 排序选项
-    col1, col2 = st.columns([3, 1])
-    with col1:
+    if 新闻列表:
+        col1, col2, col3 = st.columns(3)
+
+        with col1:
+            st.markdown(f"""
+            <div class="stat-card">
+                <div class="stat-label">总新闻数</div>
+                <div class="stat-number">{len(新闻列表)}</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+        with col2:
+            公司数 = len(set(n['company'] for n in 新闻列表))
+            st.markdown(f"""
+            <div class="stat-card">
+                <div class="stat-label">监控公司</div>
+                <div class="stat-number">{公司数}</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+        with col3:
+            分类数 = len(set(n.get('hr_category', '未分类') for n in 新闻列表))
+            st.markdown(f"""
+            <div class="stat-card">
+                <div class="stat-label">HR分类</div>
+                <div class="stat-number">{分类数}</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+        st.markdown("---")
+
+        # 筛选功能
+        col1, col2, col3, col4 = st.columns(4)
+
+        with col1:
+            所有公司 = ['全部'] + sorted(set(n['company'] for n in 新闻列表))
+            选中公司 = st.selectbox("按公司筛选", 所有公司)
+
+        with col2:
+            所有分类 = ['全部'] + sorted(set(n.get('hr_category', '未分类') for n in 新闻列表))
+            选中分类 = st.selectbox("按HR模块筛选", 所有分类)
+
+        with col3:
+            时间选项 = st.selectbox("时间范围", ['最近7天', '最近30天', '全部'])
+
+        with col4:
+            搜索词 = st.text_input("🔍 关键词搜索", placeholder="搜索标题或摘要")
+
+        # 筛选逻辑
+        筛选后新闻 = 新闻列表.copy()
+
+        if 选中公司 != '全部':
+            筛选后新闻 = [n for n in 筛选后新闻 if n['company'] == 选中公司]
+
+        if 选中分类 != '全部':
+            筛选后新闻 = [n for n in 筛选后新闻 if n.get('hr_category') == 选中分类]
+
+        if 搜索词:
+            搜索词_lower = 搜索词.lower()
+            筛选后新闻 = [n for n in 筛选后新闻
+                         if 搜索词_lower in n['title'].lower()
+                         or 搜索词_lower in n.get('summary', '').lower()]
+
         st.markdown(f"### 📋 新闻列表 ({len(筛选后新闻)} 条)")
-    with col2:
-        排序方式 = st.selectbox("排序", ['最新优先', '按公司', '按分类'], label_visibility="collapsed")
-
-    # 排序
-    if 排序方式 == '最新优先':
-        筛选后新闻.sort(key=lambda x: x['crawl_time'], reverse=True)
-    elif 排序方式 == '按公司':
-        筛选后新闻.sort(key=lambda x: (x['company'], x['crawl_time']), reverse=True)
-    else:
-        筛选后新闻.sort(key=lambda x: (x.get('hr_category', ''), x['crawl_time']), reverse=True)
-
-    # 分页
-    每页数量 = 10
-    总页数 = (len(筛选后新闻) - 1) // 每页数量 + 1 if 筛选后新闻 else 0
-
-    if 总页数 > 0:
-        当前页 = st.number_input("页码", min_value=1, max_value=总页数, value=1, step=1)
-        开始索引 = (当前页 - 1) * 每页数量
-        结束索引 = 开始索引 + 每页数量
 
         # 显示新闻
-        for 新闻 in 筛选后新闻[开始索引:结束索引]:
-            渲染新闻卡片(新闻)
+        for 新闻 in 筛选后新闻[:20]:
+            try:
+                发布时间 = datetime.fromisoformat(新闻['crawl_time'])
+                时间文本 = 发布时间.strftime('%Y-%m-%d %H:%M')
+            except:
+                时间文本 = '未知时间'
+
+            html = f"""
+            <div class="news-card">
+                <div class="news-title">{新闻['title']}</div>
+                <div class="news-meta">
+                    <span>📰 {新闻.get('source', '未知来源')}</span> |
+                    <span>🕐 {时间文本}</span>
+                </div>
+                <div class="news-summary">{新闻.get('summary', '暂无摘要')}</div>
+                <div>
+                    <span class="tag tag-company">🏢 {新闻['company']}</span>
+                    <span class="tag tag-category">📋 {新闻.get('hr_category', '未分类')}</span>
+                </div>
+                <div style="margin-top: 0.8rem;">
+                    <a href="{新闻['url']}" target="_blank" style="color: #057568; text-decoration: none;">
+                        📖 阅读原文 →
+                    </a>
+                </div>
+            </div>
+            """
+
+            st.markdown(html, unsafe_allow_html=True)
+
+            # 记录浏览
+            if 用户管理器 and st.session_state.get('logged_in'):
+                用户管理器.记录访问(st.session_state['user_info']['username'], 新闻['title'])
     else:
-        st.info("暂无符合条件的新闻")
-
-
-def 渲染统计分析页面():
-    """渲染统计分析页面"""
-    st.markdown('<div class="main-header">📊 数据统计分析</div>', unsafe_allow_html=True)
-
-    新闻列表 = st.session_state.get('新闻列表', [])
-
-    if not 新闻列表:
-        st.warning("暂无数据")
-        return
-
-    col1, col2 = st.columns(2)
-
-    with col1:
-        st.markdown("### 📈 各公司新闻数量")
-        公司统计 = Counter(n['company'] for n in 新闻列表)
-        df_公司 = pd.DataFrame(list(公司统计.items()), columns=['公司', '数量'])
-        df_公司 = df_公司.sort_values('数量', ascending=False)
-        st.bar_chart(df_公司.set_index('公司'))
-
-    with col2:
-        st.markdown("### 📋 HR模块分布")
-        分类统计 = Counter(n.get('hr_category', '未分类') for n in 新闻列表)
-        df_分类 = pd.DataFrame(list(分类统计.items()), columns=['分类', '数量'])
-        df_分类 = df_分类.sort_values('数量', ascending=False)
-        st.bar_chart(df_分类.set_index('分类'))
-
-    # 趋势分析
-    st.markdown("### 📅 时间趋势")
-    日期统计 = Counter()
-    for 新闻 in 新闻列表:
-        try:
-            日期 = datetime.fromisoformat(新闻['crawl_time']).date()
-            日期统计[日期] += 1
-        except:
-            pass
-
-    if 日期统计:
-        df_趋势 = pd.DataFrame(list(日期统计.items()), columns=['日期', '数量'])
-        df_趋势 = df_趋势.sort_values('日期')
-        st.line_chart(df_趋势.set_index('日期'))
+        st.info("暂无数据")
 
 
 def 主函数():
     """主函数"""
-    # 加载数据
+    # 初始化session state
+    if 'logged_in' not in st.session_state:
+        st.session_state['logged_in'] = False
+
     if '新闻列表' not in st.session_state:
         st.session_state['新闻列表'] = 加载数据()
 
-    # 侧边栏导航
-    页面 = st.sidebar.radio(
-        "导航",
-        ['🏠 首页概览', '📊 统计分析', '⚙️ 系统设置'],
-        label_visibility="collapsed"
-    )
+    # 如果未登录，显示登录页面
+    if not st.session_state['logged_in']:
+        登录页面()
+        return
 
-    # 刷新按钮
-    if st.sidebar.button("🔄 刷新数据"):
-        st.cache_data.clear()
-        st.session_state['新闻列表'] = 加载数据()
+    # 已登录，显示主界面
+    用户信息 = st.session_state.get('user_info', {})
+
+    # 侧边栏
+    with st.sidebar:
+        st.markdown(f"### 👤 {用户信息.get('name', '用户')}")
+        st.markdown(f"**角色**: {用户信息.get('role', 'user')}")
+
+        st.markdown("---")
+
+        # 导航菜单
+        if 用户信息.get('role') == 'admin':
+            页面 = st.radio("导航", ['🏠 新闻首页', '👥 用户管理', '🚪 退出登录'])
+        else:
+            页面 = st.radio("导航", ['🏠 新闻首页', '🚪 退出登录'])
+
+    # 处理退出登录
+    if 页面 == '🚪 退出登录':
+        st.session_state['logged_in'] = False
+        st.session_state['user_info'] = None
         st.rerun()
 
-    # 显示最后更新时间
-    if st.session_state['新闻列表']:
-        最新时间 = max(n['crawl_time'] for n in st.session_state['新闻列表'])
-        st.sidebar.markdown(f"**最后更新:** {最新时间[:16]}")
-
-    # 路由到不同页面
-    if 页面 == '🏠 首页概览':
-        渲染概览页面()
-    elif 页面 == '📊 统计分析':
-        渲染统计分析页面()
-    elif 页面 == '⚙️ 系统设置':
-        st.markdown('<div class="main-header">⚙️ 系统设置</div>', unsafe_allow_html=True)
-        st.info("设置页面开发中...")
-        st.markdown("""
-        ### 功能规划
-        - [ ] 自定义监控公司
-        - [ ] 调整HR分类
-        - [ ] 配置数据源
-        - [ ] 设置定时任务
-        - [ ] 飞书通知配置
-        """)
+    # 显示对应页面
+    if 页面 == '👥 用户管理':
+        管理员后台()
+    else:
+        渲染新闻内容()
 
 
 if __name__ == "__main__":
