@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+
+# 敏感配置（包含API密钥）
+配置文件.yaml
+.env
+
+# 数据文件（太大不适合git）
+数据/*.json
+数据/*.db
+数据/*.sqlite
+!数据/新闻数据.json
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# 操作系统
+.DS_Store
+Thumbs.db
+
+# 日志
+*.log
+
+# Streamlit缓存
+.streamlit/
+
+# 备份文件
+*备份*
+*.bak
