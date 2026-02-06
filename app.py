@@ -427,6 +427,245 @@ def 渲染新闻内容():
         st.info("暂无数据")
 
 
+def 渲染本周大事记():
+    """渲染本周大事记总结"""
+    try:
+        from AI分析.周报生成 import 生成本周大事记
+    except:
+        st.error("AI分析模块加载失败")
+        return
+
+    新闻列表 = st.session_state.get('新闻列表', [])
+
+    if not 新闻列表:
+        st.info("暂无数据")
+        return
+
+    # 生成大事记（暂时不使用AI客户端，使用规则生成）
+    大事记 = 生成本周大事记(新闻列表, ai客户端=None)
+
+    # 显示总览摘要
+    st.markdown(f"""
+    <div style="background: linear-gradient(135deg, #002D2B 0%, #057568 100%);
+                padding: 2rem; border-radius: 10px; color: white; margin-bottom: 2rem;">
+        <h2 style="margin: 0; color: white;">📊 本周HR大事记</h2>
+        <p style="font-size: 1.2rem; margin: 1rem 0 0 0; opacity: 0.95;">
+            {大事记['summary']}
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # TOP3 重要事件
+    if 大事记.get('top_events'):
+        st.markdown("### 🔥 本周TOP事件")
+
+        for i, event in enumerate(大事记['top_events'], 1):
+            st.markdown(f"""
+            <div class="news-card">
+                <div style="display: flex; align-items: center; margin-bottom: 0.5rem;">
+                    <span style="background: #002D2B; color: white; width: 30px; height: 30px;
+                                 border-radius: 50%; display: flex; align-items: center;
+                                 justify-content: center; font-weight: bold; margin-right: 1rem;">
+                        {i}
+                    </span>
+                    <span class="news-title" style="margin: 0;">{event['title']}</span>
+                </div>
+                <div class="news-meta">
+                    <span class="tag tag-company">🏢 {event['company']}</span>
+                    <span class="tag tag-category">📋 {event['category']}</span>
+                </div>
+                <div class="news-summary">{event['summary']}</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+    # 按公司汇总
+    if 大事记.get('company_updates'):
+        st.markdown("### 🏢 各公司动态")
+
+        cols = st.columns(3)
+        for i, (公司, 信息) in enumerate(大事记['company_updates'].items()):
+            with cols[i % 3]:
+                st.markdown(f"""
+                <div style="background: #f5f5f5; padding: 1rem; border-radius: 8px;
+                            border-left: 3px solid #057568;">
+                    <h4 style="margin: 0 0 0.5rem 0; color: #002D2B;">{公司}</h4>
+                    <p style="color: #666; font-size: 0.9rem; margin: 0;">
+                        本周 {信息['count']} 条动态
+                    </p>
+                </div>
+                """, unsafe_allow_html=True)
+
+    # 趋势分析
+    if 大事记.get('trends'):
+        st.markdown("### 📈 本周趋势")
+
+        for trend in 大事记['trends']:
+            st.markdown(f"- {trend}")
+
+    # 一句话洞察
+    if 大事记.get('insight'):
+        st.markdown(f"""
+        <div style="background: #FAEBD7; padding: 1.5rem; border-radius: 10px;
+                    border-left: 4px solid #CEA472; margin-top: 2rem;">
+            <h4 style="margin: 0 0 0.5rem 0; color: #002D2B;">💡 HR洞察</h4>
+            <p style="font-size: 1.1rem; color: #555; margin: 0;">
+                {大事记['insight']}
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
+
+
+def 渲染行业报告专区():
+    """渲染行业报告专区"""
+    st.markdown('<div class="main-header">📚 行业报告专区</div>', unsafe_allow_html=True)
+
+    新闻列表 = st.session_state.get('新闻列表', [])
+
+    # 筛选出行业报告
+    报告列表 = [n for n in 新闻列表 if n.get('hr_category') == '行业报告']
+
+    if not 报告列表:
+        st.info("暂无行业报告数据。启用真实爬虫后，将自动收集各类HR行业报告。")
+        st.markdown("""
+        ### 📊 即将收录的报告类型
+
+        #### 薪酬福利类
+        - 年度薪酬白皮书
+        - 行业薪酬调研报告
+        - 股权激励趋势报告
+
+        #### 人才市场类
+        - 人才供需报告
+        - 招聘趋势分析
+        - 人才流动报告
+
+        #### 组织管理类
+        - 组织效能报告
+        - 领导力发展报告
+        - 企业文化调研
+
+        #### 培训发展类
+        - 学习发展趋势
+        - 人才培养白皮书
+        - 技能需求报告
+        """)
+        return
+
+    # 统计信息
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+        st.markdown(f"""
+        <div class="stat-card">
+            <div class="stat-label">报告总数</div>
+            <div class="stat-number">{len(报告列表)}</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col2:
+        来源数 = len(set(n.get('source', '') for n in 报告列表))
+        st.markdown(f"""
+        <div class="stat-card">
+            <div class="stat-label">报告来源</div>
+            <div class="stat-number">{来源数}</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col3:
+        本月报告 = sum(1 for n in 报告列表
+                      if (datetime.now() - datetime.fromisoformat(n['crawl_time'])).days <= 30)
+        st.markdown(f"""
+        <div class="stat-card">
+            <div class="stat-label">本月新增</div>
+            <div class="stat-number">{本月报告}</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    st.markdown("---")
+
+    # 侧边栏筛选
+    st.sidebar.markdown("## 📚 报告筛选")
+
+    所有来源 = ['全部'] + sorted(set(n.get('source', '未知') for n in 报告列表))
+    选中来源 = st.sidebar.selectbox("按发布机构", 所有来源)
+
+    时间选项 = st.sidebar.radio("发布时间", ['本月', '近3个月', '近半年', '全部'], index=1)
+
+    搜索词 = st.sidebar.text_input("🔍 搜索报告", placeholder="输入关键词...")
+
+    # 筛选逻辑
+    筛选后报告 = 报告列表.copy()
+
+    if 选中来源 != '全部':
+        筛选后报告 = [n for n in 筛选后报告 if n.get('source') == 选中来源]
+
+    # 时间筛选
+    现在 = datetime.now()
+    if 时间选项 != '全部':
+        时间映射 = {'本月': 30, '近3个月': 90, '近半年': 180}
+        天数 = 时间映射[时间选项]
+        截止时间 = 现在 - timedelta(days=天数)
+        筛选后报告 = [n for n in 筛选后报告
+                     if datetime.fromisoformat(n['crawl_time']) > 截止时间]
+
+    if 搜索词:
+        搜索词_lower = 搜索词.lower()
+        筛选后报告 = [n for n in 筛选后报告
+                     if 搜索词_lower in n['title'].lower()
+                     or 搜索词_lower in n.get('summary', '').lower()]
+
+    st.markdown(f"### 📋 报告列表 ({len(筛选后报告)} 份)")
+
+    # 按时间排序
+    筛选后报告.sort(key=lambda x: x['crawl_time'], reverse=True)
+
+    # 显示报告
+    for 报告 in 筛选后报告:
+        try:
+            发布时间 = datetime.fromisoformat(报告['crawl_time'])
+            时间文本 = 发布时间.strftime('%Y-%m-%d')
+        except:
+            时间文本 = '未知时间'
+
+        # 提取关键词标签
+        关键词标签 = ""
+        if 报告.get('keywords'):
+            for 关键词 in 报告['keywords'][:4]:
+                关键词标签 += f'<span class="tag">🏷️ {关键词}</span>'
+
+        html = f"""
+        <div class="news-card" style="border-left-color: #CEA472;">
+            <div style="display: flex; justify-content: space-between; align-items: start;">
+                <div style="flex: 1;">
+                    <div class="news-title">📊 {报告['title']}</div>
+                    <div class="news-meta">
+                        <span>🏛️ {报告.get('source', '未知机构')}</span> |
+                        <span>📅 {时间文本}</span>
+                    </div>
+                </div>
+            </div>
+            <div class="news-summary" style="margin-top: 1rem;">
+                {报告.get('summary', '暂无摘要')}
+            </div>
+            <div style="margin-top: 0.8rem;">
+                {关键词标签}
+            </div>
+            <div style="margin-top: 1rem;">
+                <a href="{报告['url']}" target="_blank"
+                   style="color: #057568; text-decoration: none; font-weight: 500;">
+                    📄 查看完整报告 →
+                </a>
+            </div>
+        </div>
+        """
+
+        st.markdown(html, unsafe_allow_html=True)
+
+        # 记录浏览
+        if 用户管理器 and st.session_state.get('logged_in'):
+            用户管理器.记录访问(st.session_state['user_info']['username'], 报告['title'])
+
+
 def 主函数():
     """主函数"""
     # 初始化session state
@@ -453,9 +692,9 @@ def 主函数():
 
         # 导航菜单
         if 用户信息.get('role') == 'admin':
-            页面 = st.radio("导航", ['🏠 新闻首页', '👥 用户管理', '🚪 退出登录'])
+            页面 = st.radio("导航", ['🏠 新闻首页', '📊 本周大事记', '📚 行业报告', '👥 用户管理', '🚪 退出登录'])
         else:
-            页面 = st.radio("导航", ['🏠 新闻首页', '🚪 退出登录'])
+            页面 = st.radio("导航", ['🏠 新闻首页', '📊 本周大事记', '📚 行业报告', '🚪 退出登录'])
 
     # 处理退出登录
     if 页面 == '🚪 退出登录':
@@ -466,6 +705,10 @@ def 主函数():
     # 显示对应页面
     if 页面 == '👥 用户管理':
         管理员后台()
+    elif 页面 == '📊 本周大事记':
+        渲染本周大事记()
+    elif 页面 == '📚 行业报告':
+        渲染行业报告专区()
     else:
         渲染新闻内容()
 
