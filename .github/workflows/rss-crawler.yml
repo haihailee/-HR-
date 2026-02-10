@@ -1,0 +1,42 @@
+name: RSS新闻自动抓取
+
+on:
+  # 每天北京时间早上8点运行 (UTC 0:00)
+  schedule:
+    - cron: '0 0 * * *'
+
+  # 允许手动触发
+  workflow_dispatch:
+
+jobs:
+  抓取新闻:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 检出代码仓库
+        uses: actions/checkout@v4
+
+      - name: 设置Python环境
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: 安装依赖
+        run: |
+          python -m pip install --upgrade pip
+          pip install feedparser requests pyyaml
+
+      - name: 运行RSS爬虫
+        run: python 数据抓取/RSS爬虫.py
+
+      - name: 提交更改
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add 数据/新闻数据.json
+          git diff --quiet && git diff --staged --quiet || git commit -m "📰 自动更新新闻数据 - ${{ github.event_name }}"
+
+      - name: 推送更改
+        uses: ad-m/github-push-action@master
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
