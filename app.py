@@ -307,6 +307,9 @@ def 渲染新闻内容():
     """渲染新闻页面（原有功能）"""
     st.markdown('<div class="main-header">🚗 汽车行业HR情报监控系统</div>', unsafe_allow_html=True)
 
+    # 获取用户信息用于按钮跳转逻辑
+    用户信息 = st.session_state.get('user_info', {})
+
     # 顶部统计（简化版）
     新闻列表 = st.session_state.get('新闻列表', [])
 
@@ -348,6 +351,48 @@ def 渲染新闻内容():
                 <div class="stat-number">{分类数}</div>
             </div>
             """, unsafe_allow_html=True)
+
+        st.markdown("---")
+
+        # AI总结横幅 - 醒目提示
+        st.markdown("""
+        <div style="
+            background: linear-gradient(135deg, #057568 0%, #002D2B 100%);
+            padding: 20px 30px;
+            border-radius: 12px;
+            border-left: 5px solid #CEA472;
+            margin: 20px 0;
+            box-shadow: 0 4px 12px rgba(0,45,43,0.2);
+            cursor: pointer;
+        ">
+            <div style="display: flex; align-items: center; justify-content: space-between;">
+                <div style="flex: 1;">
+                    <div style="color: #CEA472; font-size: 14px; font-weight: 600; margin-bottom: 8px;">
+                        ✨ AI智能总结
+                    </div>
+                    <div style="color: white; font-size: 18px; font-weight: bold; margin-bottom: 5px;">
+                        本周HR大事记已生成
+                    </div>
+                    <div style="color: rgba(255,255,255,0.85); font-size: 14px;">
+                        查看TOP3重要事件、行业趋势分析和HR洞察
+                    </div>
+                </div>
+                <div style="color: #CEA472; font-size: 24px; margin-left: 20px;">
+                    📊
+                </div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        # 添加点击按钮
+        if st.button("🚀 立即查看本周大事记", type="primary", use_container_width=True):
+            # 获取本周大事记在导航选项中的索引
+            if 用户信息.get('role') == 'admin':
+                目标索引 = 1  # '📊 本周大事记' 在 admin 选项中是索引1
+            else:
+                目标索引 = 1  # '📊 本周大事记' 在 user 选项中也是索引1
+            st.session_state['导航页面_索引'] = 目标索引
+            st.rerun()
 
         st.markdown("---")
 
@@ -675,6 +720,10 @@ def 主函数():
     if '新闻列表' not in st.session_state:
         st.session_state['新闻列表'] = 加载数据()
 
+    # 初始化导航页面
+    if '导航页面' not in st.session_state:
+        st.session_state['导航页面'] = '🏠 新闻首页'
+
     # 如果未登录，显示登录页面
     if not st.session_state['logged_in']:
         登录页面()
@@ -690,24 +739,35 @@ def 主函数():
 
         st.markdown("---")
 
-        # 导航菜单
+        # 导航菜单 - 使用session_state支持按钮跳转
         if 用户信息.get('role') == 'admin':
-            页面 = st.radio("导航", ['🏠 新闻首页', '📊 本周大事记', '📚 行业报告', '👥 用户管理', '🚪 退出登录'])
+            选项 = ['🏠 新闻首页', '📊 本周大事记', '📚 行业报告', '👥 用户管理', '🚪 退出登录']
         else:
-            页面 = st.radio("导航", ['🏠 新闻首页', '📊 本周大事记', '📚 行业报告', '🚪 退出登录'])
+            选项 = ['🏠 新闻首页', '📊 本周大事记', '📚 行业报告', '🚪 退出登录']
+
+        # 从session_state获取当前页面索引
+        当前页面索引 = st.session_state.get('导航页面_索引', 0)
+        用户选择 = st.radio("导航", 选项, index=当前页面索引)
+
+        # 更新session state
+        选项索引 = 选项.index(用户选择)
+        st.session_state['导航页面'] = 用户选择
+        st.session_state['导航页面_索引'] = 选项索引
 
     # 处理退出登录
-    if 页面 == '🚪 退出登录':
+    if 用户选择 == '🚪 退出登录':
         st.session_state['logged_in'] = False
         st.session_state['user_info'] = None
+        st.session_state['导航页面'] = '🏠 新闻首页'
+        st.session_state['导航页面_索引'] = 0
         st.rerun()
 
     # 显示对应页面
-    if 页面 == '👥 用户管理':
+    if 用户选择 == '👥 用户管理':
         管理员后台()
-    elif 页面 == '📊 本周大事记':
+    elif 用户选择 == '📊 本周大事记':
         渲染本周大事记()
-    elif 页面 == '📚 行业报告':
+    elif 用户选择 == '📚 行业报告':
         渲染行业报告专区()
     else:
         渲染新闻内容()
